@@ -7,18 +7,37 @@ Web app chạy code Python trên trình duyệt, dành cho người mới học.
 ```bash
 cd runpy
 npm install
-node server.js
+
+# Cài tini — BẮT BUỘC, xem lý do ở mục cảnh báo bên dưới
+sudo apt-get update && sudo apt-get install -y tini
+
+# Chạy server qua tini ở chế độ subreaper (-s)
+tini -s -- node server.js
 ```
 
 Server chạy tại `http://<ip-server>:25080`.
 
-Yêu cầu trên máy chủ: **Node.js ≥ 18** và **python3** đã cài sẵn (`python3 --version` để kiểm tra).
+Yêu cầu trên máy chủ: **Node.js ≥ 18**, **python3**, và **tini** đã cài sẵn.
+
+## ⚠️ BẮT BUỘC: chạy qua `tini -s`, không chạy `node server.js` trực tiếp
+
+Khi code Python của người dùng tự tạo thêm tiến trình con (`os.fork()`, `multiprocessing`, hoặc vô tình/cố ý tạo fork-bomb), các tiến trình con này có thể chết trước cha của chúng và trở thành **zombie process**. Nếu không có gì đứng ra "dọn" (reap) chúng, zombie sẽ tích tụ dần và cuối cùng làm cạn kiệt bảng tiến trình của *toàn bộ máy chủ* — gây lỗi `fork: Resource temporarily unavailable` cho mọi tiến trình trên máy, không riêng gì RunPy. (Đây chính là nguyên nhân gốc của lỗi bạn từng gặp.)
+
+`tini -s` giải quyết việc này bằng cách đứng làm "subreaper": nó tự động dọn mọi tiến trình mồ côi thay vì để chúng trôi nổi. Đây là giải pháp chuẩn, được dùng rộng rãi trong Docker (`docker run --init` thực chất cũng dùng tini bên dưới).
+
+**Nếu deploy bằng Docker**, chỉ cần thêm cờ `--init` khi chạy container (không cần cài tini thủ công):
+```bash
+docker run --init -p 25080:25080 your-runpy-image
+```
+
+**Nếu deploy bằng PM2** (xem mục dưới): PM2 tự quản lý tiến trình con trực tiếp của nó nhưng KHÔNG dọn zombie cháu (grandchildren) do code Python tự fork ra — vẫn cần chạy PM2 qua `tini -s` hoặc bật `--init` nếu dùng trong container.
 
 ## Chạy nền / production (khuyến nghị dùng PM2)
 
 ```bash
+sudo apt-get install -y tini
 npm install -g pm2
-pm2 start server.js --name runpy
+pm2 start "tini -s -- node server.js" --name runpy
 pm2 save
 pm2 startup   # để tự khởi động lại khi server reboot
 ```

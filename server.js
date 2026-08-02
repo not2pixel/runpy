@@ -19,7 +19,7 @@ const QUEUE_TIMEOUT_MS = 15_000;    // tối đa chờ trong hàng đợi
 const EXEC_TIMEOUT_SEC = 8;         // mỗi lần chạy tối đa 8 giây
 const MEM_LIMIT_KB = 256 * 1024;    // 256MB bộ nhớ ảo / tiến trình
 const FILE_SIZE_LIMIT_KB = 20 * 1024; // 1 file tối đa 20MB (an toàn)
-const PROC_LIMIT = 24;              // chống fork-bomb
+const PROC_LIMIT = 200;             // chống fork-bomb (đủ cao để không chặn nhầm khi nhiều người chạy cùng lúc)
 const SESSION_QUOTA_BYTES = 20 * 1024 * 1024; // 20MB / user
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;    // dọn session sau 2h không dùng
 const MAX_OUTPUT_CHARS = 100_000;   // chặn output khổng lồ làm treo trình duyệt
@@ -127,23 +127,38 @@ function runPythonSandboxed(dir, code, stdin) {
     const codeFile = path.join(dir, 'main.py');
     fs.writeFileSync(codeFile, code, 'utf8');
 
-    // Giới hạn tài nguyên bằng ulimit trong bash, rồi timeout để chặn treo vô hạn.
-    // -v: bộ nhớ ảo, -f: kích thước file tối đa, -u: số tiến trình con (chống fork-bomb)
+    // Giới hạn tài nguyên bằng ulimit: -v bộ nhớ ảo, -f kích thước file tối đa,
+    // -u số tiến trình (chống fork-bomb ở mức hạt nhân, nhưng KHÔNG đủ để tự dọn
+    // các tiến trình mồ côi khi timeout, nên phần giết tiến trình do Node đảm nhiệm bên dưới).
     const bashCmd =
       `ulimit -v ${MEM_LIMIT_KB}; ` +
       `ulimit -f ${FILE_SIZE_LIMIT_KB}; ` +
-      `ulimit -u ${PROC_LIMIT}; ` +
-      `exec timeout -k 1 ${EXEC_TIMEOUT_SEC}s python3 -I -B main.py`;
+      `ulimit -u ${PROC_LIMIT} 2>/dev/null || true; ` +
+      `exec python3 -I -B main.py`;
 
+    // detached: true -> tiến trình con trở thành trưởng nhóm tiến trình (setsid) mới.
+    // Nhờ vậy mọi tiến trình con/cháu do code Python tự fork ra (kể cả fork-bomb)
+    // đều nằm chung nhóm này, và ta có thể giết SẠCH cả nhóm bằng process.kill(-pid).
     const child = spawn('bash', ['-c', bashCmd], {
       cwd: dir,
       env: { PATH: process.env.PATH, HOME: dir, PYTHONDONTWRITEBYTECODE: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],
+      detached: true,
     });
 
     let stdout = '';
     let stderr = '';
     let killedForOutput = false;
+    let timedOut = false;
+    let settled = false;
+
+    function killGroup(signal) {
+      try {
+        process.kill(-child.pid, signal);
+      } catch {
+        // nhóm tiến trình có thể đã kết thúc, bỏ qua
+      }
+    }
 
     child.stdout.on('data', (chunk) => {
       if (stdout.length < MAX_OUTPUT_CHARS) {
@@ -151,7 +166,7 @@ function runPythonSandboxed(dir, code, stdin) {
       } else if (!killedForOutput) {
         killedForOutput = true;
         stdout += '\n[... output đã bị cắt bớt do quá dài ...]';
-        child.kill('SIGKILL');
+        killGroup('SIGKILL');
       }
     });
 
@@ -168,10 +183,36 @@ function runPythonSandboxed(dir, code, stdin) {
 
     const startedAt = Date.now();
 
+    // Timer chính: hết giờ -> giết cả nhóm tiến trình (SIGTERM rồi SIGKILL sau 1s)
+    const hardTimer = setTimeout(() => {
+      timedOut = true;
+      killGroup('SIGTERM');
+      setTimeout(() => killGroup('SIGKILL'), 1000);
+    }, EXEC_TIMEOUT_SEC * 1000);
+
+    // Lưới an toàn: nếu vì lý do gì đó 'close' không bao giờ bắn (trường hợp cực hiếm
+    // với fork-bomb dữ dội), vẫn phải trả lời request thay vì treo mãi.
+    const failsafeTimer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      killGroup('SIGKILL');
+      resolve({
+        stdout: stdout.slice(0, MAX_OUTPUT_CHARS),
+        stderr: (stderr + '\n[Đã buộc dừng: chương trình tạo quá nhiều tiến trình con]').slice(0, MAX_OUTPUT_CHARS),
+        exitCode: -1,
+        durationMs: Date.now() - startedAt,
+        status: 'timeout',
+      });
+    }, (EXEC_TIMEOUT_SEC + 5) * 1000);
+
     child.on('close', (codeExit, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(hardTimer);
+      clearTimeout(failsafeTimer);
       const durationMs = Date.now() - startedAt;
       let status = 'ok';
-      if (signal === 'SIGTERM' || codeExit === 124 || codeExit === 137) {
+      if (timedOut || signal === 'SIGTERM' || signal === 'SIGKILL') {
         status = 'timeout';
       } else if (codeExit !== 0) {
         status = 'error';
@@ -186,6 +227,10 @@ function runPythonSandboxed(dir, code, stdin) {
     });
 
     child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(hardTimer);
+      clearTimeout(failsafeTimer);
       resolve({
         stdout,
         stderr: `Lỗi hệ thống khi khởi chạy: ${err.message}`,
