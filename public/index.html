@@ -1,0 +1,64 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RunPy — Trình biên dịch Python trực tuyến</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🐍</span>
+      <span class="brand-name">Run<span class="accent">Py</span></span>
+      <span class="tagline">Học Python ngay trên trình duyệt</span>
+    </div>
+    <div class="topbar-right">
+      <div class="quota-wrap" title="Dung lượng lưu trữ đã dùng">
+        <div class="quota-bar"><div id="quotaFill" class="quota-fill"></div></div>
+        <span id="quotaText">0 KB / 20 MB</span>
+      </div>
+      <button id="resetBtn" class="btn-ghost">🗑️ Dọn dẹp</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="editor-pane">
+      <div class="pane-header">
+        <span>main.py</span>
+        <div class="actions">
+          <button id="runBtn" class="btn-run">▶ Chạy (Ctrl+Enter)</button>
+        </div>
+      </div>
+      <textarea id="code" spellcheck="false" class="code-area">print("Xin chào, RunPy!")
+
+# Thử sửa đoạn code này rồi bấm Chạy
+for i in range(5):
+    print("Số:", i)
+</textarea>
+    </section>
+
+    <section class="io-pane">
+      <div class="pane-header">
+        <span>Đầu vào (stdin) — tùy chọn</span>
+      </div>
+      <textarea id="stdin" class="stdin-area" placeholder="Nếu code có input(), nhập dữ liệu ở đây, mỗi dòng một giá trị..."></textarea>
+
+      <div class="pane-header">
+        <span>Kết quả</span>
+        <div class="actions">
+          <span id="statusBadge" class="status-badge idle">Sẵn sàng</span>
+        </div>
+      </div>
+      <pre id="output" class="output-area">Nhấn "Chạy" để thực thi code Python của bạn...</pre>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Mỗi tài khoản được cấp 20MB không gian lưu trữ · Tối đa 10 người chạy code cùng lúc · Mỗi lần chạy giới hạn 8 giây</span>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
