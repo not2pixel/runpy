@@ -3,61 +3,168 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>RunPy — Trình biên dịch Python trực tuyến</title>
+<title>RunPy — Python Online</title>
+<meta name="description" content="Chạy Python trực tiếp trên trình duyệt" />
+<!-- CSP extra layer — server cũng set header này -->
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data:; object-src 'none';" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
+<div class="app">
+
+  <!-- TOPBAR -->
   <header class="topbar">
-    <div class="brand">
-      <span class="logo">🐍</span>
-      <span class="brand-name">Run<span class="accent">Py</span></span>
-      <span class="tagline">Học Python ngay trên trình duyệt</span>
+    <div class="topbar-left">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+          </svg>
+        </div>
+        <span class="brand-name">RunPy</span>
+      </div>
+      <div class="divider-v" aria-hidden="true"></div>
+      <div class="lang-badge">
+        <span class="lang-dot" aria-hidden="true"></span>
+        Python 3
+      </div>
     </div>
     <div class="topbar-right">
-      <div class="quota-wrap" title="Dung lượng lưu trữ đã dùng">
-        <div class="quota-bar"><div id="quotaFill" class="quota-fill"></div></div>
-        <span id="quotaText">0 KB / 20 MB</span>
+      <div class="quota-wrap" title="Dung lượng đã dùng">
+        <div class="quota-track" role="progressbar" aria-label="Quota">
+          <div id="quotaFill" class="quota-fill"></div>
+        </div>
+        <span id="quotaText" class="quota-text">0 / 20 MB</span>
       </div>
-      <button id="resetBtn" class="btn-ghost">🗑️ Dọn dẹp</button>
+      <button id="resetBtn" class="btn-ghost" title="Xóa file session">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/>
+        </svg>
+        Dọn dẹp
+      </button>
+      <button id="runBtn" class="btn-run" aria-label="Chạy code (Ctrl+Enter)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        Chạy
+        <span class="shortcut" aria-hidden="true">⌘↵</span>
+      </button>
     </div>
   </header>
 
-  <main class="layout">
-    <section class="editor-pane">
-      <div class="pane-header">
-        <span>main.py</span>
-        <div class="actions">
-          <button id="runBtn" class="btn-run">▶ Chạy (Ctrl+Enter)</button>
+  <!-- WORKSPACE -->
+  <div class="workspace">
+
+    <!-- EDITOR PANEL -->
+    <div class="panel editor-panel" role="region" aria-label="Code editor">
+      <div class="panel-header">
+        <div class="panel-title">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span class="file-label">main.py</span>
+          <span id="cursorPos" class="cursor-pos" aria-live="polite">1:1</span>
+        </div>
+        <div class="panel-actions">
+          <button class="icon-btn" id="copyBtn" title="Sao chép code" aria-label="Sao chép code">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+          </button>
+          <button class="icon-btn" id="clearBtn" title="Xóa code" aria-label="Xóa toàn bộ code">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+            </svg>
+          </button>
         </div>
       </div>
-      <textarea id="code" spellcheck="false" class="code-area">print("Xin chào, RunPy!")
+      <div id="monacoEditor" class="monaco-container" aria-label="Monaco code editor"></div>
+    </div>
 
-# Thử sửa đoạn code này rồi bấm Chạy
-for i in range(5):
-    print("Số:", i)
-</textarea>
-    </section>
+    <!-- RIGHT PANEL -->
+    <div class="panel right-panel">
 
-    <section class="io-pane">
-      <div class="pane-header">
-        <span>Đầu vào (stdin) — tùy chọn</span>
-      </div>
-      <textarea id="stdin" class="stdin-area" placeholder="Nếu code có input(), nhập dữ liệu ở đây, mỗi dòng một giá trị..."></textarea>
-
-      <div class="pane-header">
-        <span>Kết quả</span>
-        <div class="actions">
-          <span id="statusBadge" class="status-badge idle">Sẵn sàng</span>
+      <!-- STDIN -->
+      <div class="sub-panel stdin-panel" id="stdinPanel">
+        <div class="panel-header collapsible" id="stdinToggle" role="button" tabindex="0"
+             aria-expanded="true" aria-controls="stdinBody">
+          <div class="panel-title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            Đầu vào (stdin)
+          </div>
+          <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+        <div class="stdin-body" id="stdinBody">
+          <textarea id="stdin" class="stdin-area"
+            placeholder="Nhập dữ liệu cho input()... (mỗi dòng một giá trị)"
+            aria-label="Standard input (stdin)"></textarea>
         </div>
       </div>
-      <pre id="output" class="output-area">Nhấn "Chạy" để thực thi code Python của bạn...</pre>
-    </section>
-  </main>
 
-  <footer class="footer">
-    <span>Mỗi tài khoản được cấp 20MB không gian lưu trữ · Tối đa 10 người chạy code cùng lúc · Mỗi lần chạy giới hạn 8 giây</span>
+      <!-- OUTPUT -->
+      <div class="sub-panel output-panel" role="region" aria-label="Kết quả">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polyline points="4 17 10 11 4 5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            Kết quả
+          </div>
+          <div class="panel-actions">
+            <span id="runTime" class="run-time" aria-live="polite"></span>
+            <span id="statusBadge" class="status-badge idle" aria-live="polite">Sẵn sàng</span>
+            <button class="icon-btn" id="copyOutputBtn" title="Sao chép kết quả" aria-label="Sao chép kết quả" style="display:none">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="output-wrap">
+          <pre id="output" class="output-area" aria-live="polite" aria-label="Output">Nhấn Chạy để thực thi code Python...</pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <footer class="statusbar" role="status">
+    <span class="sb-item">Python 3</span>
+    <span class="sb-sep" aria-hidden="true"></span>
+    <span class="sb-item">UTF-8</span>
+    <span class="sb-sep" aria-hidden="true"></span>
+    <span class="sb-item">Timeout 8s · 20MB</span>
+    <span class="sb-sep" aria-hidden="true"></span>
+    <span id="sbQueue" class="sb-item">
+      <svg width="10" height="10" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" fill="#4ade80"/>
+      </svg>
+      <span id="sbStatus">Sẵn sàng</span>
+    </span>
   </footer>
 
-  <script src="script.js"></script>
+</div>
+
+<!-- Monaco -->
+<script>
+  window.require = { paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"
+  crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="script.js"></script>
 </body>
 </html>
